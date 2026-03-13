@@ -3,6 +3,8 @@ import { Purchases } from '@revenuecat/purchases-js'
 import type { Offering } from '@revenuecat/purchases-js'
 
 const RC_API_KEY = 'test_bTqBtYvFKnvuUCcjxfzEunqlrBv'
+const OFFERING_ID = 'ofrng260c3343ad'
+const ENTITLEMENT_ID = 'Jordan Demo Pro'
 
 interface RevenueCatState {
   isSubscribed: boolean
@@ -26,13 +28,17 @@ export function useRevenueCat(): RevenueCatState {
 
         const purchases = Purchases.getSharedInstance()
         const customerInfo = await purchases.getCustomerInfo()
-        setIsSubscribed('Jordan Demo Pro' in customerInfo.entitlements.active)
+        setIsSubscribed(ENTITLEMENT_ID in customerInfo.entitlements.active)
 
         const offerings = await purchases.getOfferings()
-        if (!offerings.current) {
-          setError('No offerings configured in RevenueCat dashboard.')
+        // Try specific offering ID first, fall back to current
+        const offering = offerings.all[OFFERING_ID] ?? offerings.current ?? null
+        if (!offering) {
+          setError(`Offering "${OFFERING_ID}" not found. Available: ${Object.keys(offerings.all).join(', ') || 'none'}`)
+        } else {
+          console.log('Offering loaded:', offering.identifier, 'Packages:', offering.availablePackages.length)
         }
-        setCurrentOffering(offerings.current ?? null)
+        setCurrentOffering(offering)
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
         console.error('RevenueCat init error:', message)
@@ -49,32 +55,29 @@ export function useRevenueCat(): RevenueCatState {
       setError(null)
       const purchases = Purchases.getSharedInstance()
       const offerings = await purchases.getOfferings()
-      const offering = offerings.current
+      const offering = offerings.all[OFFERING_ID] ?? offerings.current
       if (!offering) {
         setError('No offerings available. Check RevenueCat dashboard configuration.')
         return
       }
 
-      // Try presentPaywall first (requires web paywall attached to offering)
-      // Fall back to direct purchase with the first available package
-      let customerInfo
-      try {
-        const result = await purchases.presentPaywall({ offering })
-        customerInfo = result.customerInfo
-      } catch (paywallErr) {
-        console.warn('presentPaywall failed, falling back to direct purchase:', paywallErr)
-        const pkg = offering.availablePackages[0]
-        if (!pkg) {
-          setError('No packages available in the current offering.')
-          return
-        }
-        const result = await purchases.purchase({ rcPackage: pkg })
-        customerInfo = result.customerInfo
+      const pkg = offering.availablePackages[0]
+      if (!pkg) {
+        setError('No packages available in the offering.')
+        return
       }
 
-      setIsSubscribed('Jordan Demo Pro' in customerInfo.entitlements.active)
+      // Use direct purchase — triggers Stripe checkout
+      console.log('Purchasing package:', pkg.identifier)
+      const { customerInfo } = await purchases.purchase({ rcPackage: pkg })
+      setIsSubscribed(ENTITLEMENT_ID in customerInfo.entitlements.active)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
+      // User closing the checkout window is not an error
+      if (message.includes('cancelled') || message.includes('canceled')) {
+        console.log('Purchase cancelled by user')
+        return
+      }
       console.error('Purchase error:', message)
       setError(`Purchase failed: ${message}`)
     }

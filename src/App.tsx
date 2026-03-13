@@ -7,7 +7,7 @@ import SubscribedState from './components/SubscribedState'
 import Footer from './components/Footer'
 
 export default function App() {
-  const { isSubscribed, isLoading, subscribe } = useRevenueCat()
+  const { isSubscribed, isLoading, error, subscribe } = useRevenueCat()
 
   if (isLoading) {
     return (
@@ -25,6 +25,11 @@ export default function App() {
 
   return (
     <main>
+      {error && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-red-500/10 border border-red-500/30 text-red-400 px-6 py-3 rounded-xl text-sm max-w-lg text-center backdrop-blur-sm">
+          {error}
+        </div>
+      )}
       <Hero onSubscribe={subscribe} />
       <Stats />
       <Capabilities />

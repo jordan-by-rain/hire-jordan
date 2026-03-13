@@ -7,6 +7,7 @@ const RC_API_KEY = 'test_bTqBtYvFKnvuUCcjxfzEunqlrBv'
 interface RevenueCatState {
   isSubscribed: boolean
   isLoading: boolean
+  error: string | null
   currentOffering: Offering | null
   subscribe: () => Promise<void>
 }
@@ -14,6 +15,7 @@ interface RevenueCatState {
 export function useRevenueCat(): RevenueCatState {
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [currentOffering, setCurrentOffering] = useState<Offering | null>(null)
 
   useEffect(() => {
@@ -27,9 +29,14 @@ export function useRevenueCat(): RevenueCatState {
         setIsSubscribed('Jordan Demo Pro' in customerInfo.entitlements.active)
 
         const offerings = await purchases.getOfferings()
+        if (!offerings.current) {
+          setError('No offerings configured in RevenueCat dashboard.')
+        }
         setCurrentOffering(offerings.current ?? null)
-      } catch (error) {
-        console.error('RevenueCat init error:', error)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        console.error('RevenueCat init error:', message)
+        setError(`RevenueCat init failed: ${message}`)
       } finally {
         setIsLoading(false)
       }
@@ -39,17 +46,23 @@ export function useRevenueCat(): RevenueCatState {
 
   const subscribe = useCallback(async () => {
     try {
+      setError(null)
       const purchases = Purchases.getSharedInstance()
       const offerings = await purchases.getOfferings()
       const offering = offerings.current
-      if (!offering) return
+      if (!offering) {
+        setError('No offerings available. Check RevenueCat dashboard configuration.')
+        return
+      }
 
       const { customerInfo } = await purchases.presentPaywall({ offering })
       setIsSubscribed('Jordan Demo Pro' in customerInfo.entitlements.active)
-    } catch (error) {
-      console.error('Purchase error:', error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('Purchase error:', message)
+      setError(`Purchase failed: ${message}`)
     }
   }, [])
 
-  return { isSubscribed, isLoading, currentOffering, subscribe }
+  return { isSubscribed, isLoading, error, currentOffering, subscribe }
 }

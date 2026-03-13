@@ -55,7 +55,23 @@ export function useRevenueCat(): RevenueCatState {
         return
       }
 
-      const { customerInfo } = await purchases.presentPaywall({ offering })
+      // Try presentPaywall first (requires web paywall attached to offering)
+      // Fall back to direct purchase with the first available package
+      let customerInfo
+      try {
+        const result = await purchases.presentPaywall({ offering })
+        customerInfo = result.customerInfo
+      } catch (paywallErr) {
+        console.warn('presentPaywall failed, falling back to direct purchase:', paywallErr)
+        const pkg = offering.availablePackages[0]
+        if (!pkg) {
+          setError('No packages available in the current offering.')
+          return
+        }
+        const result = await purchases.purchase({ rcPackage: pkg })
+        customerInfo = result.customerInfo
+      }
+
       setIsSubscribed('Jordan Demo Pro' in customerInfo.entitlements.active)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
